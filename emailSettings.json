@@ -1,0 +1,14 @@
+﻿{
+  "host": "smtp.office365.com",
+  "port": 587,
+  "startTls": true,
+  "username": "lauscc@laus.hr",
+  "password": "kJhfV%45FvcAS!23S",
+  "from": "support@laus.hr",
+  "to": [
+    "domagoj@laus.hr",
+    "domagoj.jugovic@gmail.com"
+  ],
+  "subject": "MORH Offline Drop"
+}
+ 

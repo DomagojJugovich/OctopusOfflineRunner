@@ -1,0 +1,26 @@
+﻿<Window x:Class="OfflineDropRunner.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:OfflineDropRunner"
+        mc:Ignorable="d"
+        Title="Octopus Offline Drop Runner" Height="650" Width="1000">
+    <Grid>
+        <Grid.ColumnDefinitions>
+        <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" VerticalAlignment="Top" Orientation="Horizontal">
+            <Button x:Name="RunButton"  Content="Run Offline Drop" HorizontalAlignment="Left" Margin="10,10,3,3" VerticalAlignment="Top" Width="170" Height="40" Click="RunButton_Click"/>
+            <Button x:Name="CopyLog"  Content="Copy Log" HorizontalAlignment="Right" Margin="10,10,3,3" VerticalAlignment="Top" Width="170" Height="40" Click="CopyLog_Click" />
+            <CheckBox x:Name="RtfFormat" Content="RtfFormat ?" VerticalAlignment="Center" Margin="20,10,3,3"></CheckBox>
+        </StackPanel>
+        <ScrollViewer  x:Name="scrollViewTb" Grid.Row="1" HorizontalAlignment="Stretch"  VerticalAlignment="Stretch" Margin="5,5,5,5">
+            <RichTextBox x:Name="OutText" IsReadOnly="True" HorizontalAlignment="Stretch" AcceptsReturn="True" VerticalAlignment="Stretch" />
+        </ScrollViewer>
+    </Grid>
+</Window>
