@@ -1,0 +1,2 @@
+cd OfflineRunner
+elevate OfflineDropRunner.exe

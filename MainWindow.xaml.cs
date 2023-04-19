@@ -1,10 +1,15 @@
 ﻿using MailKit.Net.Smtp;
+using MailKit.Security;
 using MimeKit;
+using RtfPipe.Model;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Mail;
+using System.Security.Policy;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -20,6 +25,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using System.Xml;
 using ZeroDep;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace OfflineDropRunner
 {
@@ -38,6 +44,7 @@ namespace OfflineDropRunner
         string rtfLog2save;
         string txtLog2save;
         string htmlLog2save;
+        private bool thereWereErrors = false;
 
         public MainWindow()
         {
@@ -48,6 +55,16 @@ namespace OfflineDropRunner
             myParagraph.Inlines.Add(myBold);
             myFlowDoc.Blocks.Add(myParagraph);
             this.OutText.Document = myFlowDoc;
+
+            if ( !UACHelper.UACHelper.IsAdministrator ) {
+                System.Windows.MessageBox.Show("Molim vas pokrenite instalaciju kao korisnik s administratorskim dozvolama !");
+                Environment.Exit(-2); 
+            }
+            if ( !UACHelper.UACHelper.IsElevated ) {
+                System.Windows.MessageBox.Show("Molim vas pokrenite instalaciju kao korisnik s administratorskim dozvolama u elevated modu !");
+                Environment.Exit(-3); 
+            }
+            
         }
 
         private void RunButton_Click(object sender, RoutedEventArgs e)
@@ -58,15 +75,20 @@ namespace OfflineDropRunner
 
                 exePath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
                 cmdPath = System.IO.Directory.GetParent(exePath).FullName;
-                string[] dirFiles = System.IO.Directory.GetFiles(cmdPath, "*.cmd", SearchOption.TopDirectoryOnly);
+                string[] dirFilesCmd = System.IO.Directory.GetFiles(cmdPath, "*.cmd", SearchOption.TopDirectoryOnly);
+                string[] dirFilesPs1 = System.IO.Directory.GetFiles(cmdPath, "*.ps1", SearchOption.TopDirectoryOnly);
 
+                //Sve bi mogli pretpostaviti ali config offline targeta zahtjeva fixne foldere za app i za journal tako da ovjde imamo config koji sadrzi iste postavke !!!!!!!!!!
                 string settFileName = System.IO.Path.Combine(exePath,"offlineRunnerSettings.json");
                 string jsonString = File.ReadAllText(settFileName);
                 runnerSett = (OfflineDropSettings)Json.Deserialize(jsonString, typeof(OfflineDropSettings));
 
                 //izadji iz subfoldera
                 System.IO.Directory.SetCurrentDirectory(cmdPath);
-                ExecCmd(dirFiles[0], this.OutText);
+                //ubaci passwor  u ps1
+                InsertPassword(dirFilesPs1[0], cmdPath);
+                //execute
+                ExecCmd(dirFilesCmd[0], this.OutText);
 
 
             } catch (Exception ex) {
@@ -76,11 +98,29 @@ namespace OfflineDropRunner
             } 
         }
 
+        private void InsertPassword(string file, string cmdPath)
+        {
+            string[] lines = File.ReadAllLines(file);
+            string[] lines2 = new string[lines.Length];
+
+            for(int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("$Password = ")) {
+                    lines2[i] = "    $Password = \"" + TxtPassword.Text + "\"";
+                    continue;
+                }
+
+                lines2[i] = lines[i];
+            }
+
+            File.WriteAllLines(file, lines2);
+        }
+
         private void logError(Exception ex)
         {
             try
             {
-                appendOutput("ERROR in runner :", Brushes.Red, this.OutText, true, true);
+                appendOutput("ERROR in OfflineRunner :", Brushes.Red, this.OutText, true, true);
                 appendOutput(ex.Message, Brushes.Red, this.OutText, true, true);
                 appendOutput(ex.StackTrace, Brushes.Black, this.OutText, false, false);
                 if (ex.InnerException != null)
@@ -99,12 +139,23 @@ namespace OfflineDropRunner
             document.Load(tentacleJournal);
 
 
-            //treba provjeriti samo LAstiChile jer deploymentJournal fajla se nikad NE GAZI, samo se dododaje po jedan node/zapis po pokretanju deploymenta, tako Octopus radi....AAAAAAA
-
-                    if (document.DocumentElement.LastChild.Attributes["WasSuccessful"].Value != "True")
+            //deploymentJournal file id deleted evry toime before run so cjeck all nodes
+            appendOutput("DeploymentJournal CHECK :", Brushes.Black, this.OutText, false, false);
+                    foreach (XmlNode node in document.DocumentElement.ChildNodes)
                     {
-                        appendOutput("ERROR :::: WasSuccessful is False - " + document.DocumentElement.LastChild.Attributes["RetentionPolicySet"].Value, Brushes.Red, this.OutText, false, false);
-                        success = false;
+                        if (node.Attributes["WasSuccessful"].Value != "True")
+                        {
+                            appendOutput("ERROR :::: DeploymentJournal WasSuccessful is False - " + node.Attributes["RetentionPolicySet"].Value, Brushes.Red, this.OutText, false, false);
+                            success = false;
+                        } else {
+                            appendOutput("DeploymentJournal STEP: " + node.Attributes["RetentionPolicySet"].Value + " - is OK !", Brushes.Black, this.OutText, false, false);
+                        }
+                    }
+
+                   //was there Error Output (redirect)
+                    if (thereWereErrors) {
+                        appendOutput("ERROR :::: thereWereErrors is True" , Brushes.Red, this.OutText, false, false); 
+                        success = false; 
                     }
 
             if (success)
@@ -125,8 +176,10 @@ namespace OfflineDropRunner
         /// <param name="output">output which application produced</param>
         /// <param name="transferEnvVars">true - if retain PATH environment variable from executed command</param>
         /// <returns>true if process exited with code 0</returns>
-        private void ExecCmd(string cmd, RichTextBox block)
+        private void ExecCmd(string cmd, System.Windows.Controls.RichTextBox block)
         {
+            thereWereErrors = false;
+
             ProcessStartInfo processInfo;
             Process process;
 
@@ -144,8 +197,22 @@ namespace OfflineDropRunner
             process.StartInfo = processInfo;
             process.EnableRaisingEvents = true;
             process.OutputDataReceived += (sender, args) => { appendOutput(args.Data, Brushes.Black, this.OutText, false, false); };
-            process.ErrorDataReceived += (sender, args) => { appendOutput(args.Data, Brushes.Red, this.OutText, false, false); };
+            
+            process.ErrorDataReceived += (sender, args) => {
+                if (args.Data != null)
+                {
+                    appendOutput(args.Data.Trim(), Brushes.Red, this.OutText, false, false);
+                    //args.Data.Trim() jer se u MORHU dogadja da duhovi ubacuju BLANK na std error output pa nema nista crveno a bude thereWereErrors = TRUE iz nicega tj tih duhova
+                    thereWereErrors = true;
+
+                    //TODO ovaj hendker se izvudi u nekom drugom threadu te bi trebalo imati svoj try catch jer se dogadja unhandled exception
+                }
+            };
+
             process.Exited += new EventHandler(myProcess_Exited);
+
+            //before start clean DeployJournal, so after deploy we will check all nodes for success, without delete is is hard to know which entrys are new
+            File.Delete(runnerSett.TentacleJournal);
             process.Start();
             
 
@@ -179,7 +246,7 @@ namespace OfflineDropRunner
                     try
                     {
                         SaveLog();
-                        SendEmail();
+                        if (runnerSett.SendEmail) SendEmail(runnerSett.UseOldSmtpClient);
                         //vrati button
                         this.RunButton.IsEnabled = true;
 
@@ -195,7 +262,7 @@ namespace OfflineDropRunner
             }
         }
 
-        private void appendOutput(string data, SolidColorBrush color, RichTextBox tb, bool bold, bool bigger)
+        private void appendOutput(string data, SolidColorBrush color, System.Windows.Controls.RichTextBox tb, bool bold, bool bigger)
         {
             //if (transferenvVars)
             //{
@@ -218,8 +285,7 @@ namespace OfflineDropRunner
             //gui log
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                try
-                {
+
 
                     var r = new Run(data);
                     r.Foreground = color;
@@ -228,8 +294,7 @@ namespace OfflineDropRunner
                     myParagraph.Inlines.Add(r);
                     myParagraph.Inlines.Add(new LineBreak());
                     scrollViewTb.ScrollToEnd();
-                }
-                catch (Exception ex) { logError(ex); }
+     
 
 
             }), DispatcherPriority.Normal);
@@ -243,46 +308,95 @@ namespace OfflineDropRunner
             //}
 
         }
-        public void SendEmail()
+        public void SendEmail(bool useOldClient)
         {
-            
+
             string fileName = System.IO.Path.Combine(exePath, "emailSettings.json");
             string jsonString = File.ReadAllText(fileName);
             EmailSettings emailSett = (EmailSettings)Json.Deserialize(jsonString, typeof(EmailSettings));
 
+            if (useOldClient)
+            {
+                sendWithNETClient(emailSett);
+            }
+            else
+            {
+                sendWithMailKit(emailSett);
+            }
+        }
+
+        private void sendWithMailKit(EmailSettings emailSett)
+        {
             var message = new MimeMessage();
             message.From.Add(new MailboxAddress(emailSett.From, emailSett.From));
             foreach (var em in emailSett.To)
             {
                 message.To.Add(new MailboxAddress(em, em));
             }
-            
+
             message.Subject = emailSett.Subject;
 
             //var bodytext = new TextPart("plain");
             var bodytext = new TextPart("html");
             bodytext.Text = htmlLog2save;
             message.Body = bodytext;
-            
 
-            using (var client = new SmtpClient())
+
+            using (var client = new MailKit.Net.Smtp.SmtpClient())
             {
+                client.ServerCertificateValidationCallback = (s, c, h, e) => true;
+                client.CheckCertificateRevocation = false;
+
                 if (emailSett.StartTls) { client.Connect(emailSett.Host, emailSett.Port, MailKit.Security.SecureSocketOptions.StartTls); }
                 else { client.Connect(emailSett.Host, emailSett.Port, MailKit.Security.SecureSocketOptions.None); }
+
                 client.Authenticate(emailSett.Username, emailSett.Password);
+
+                //var sasl = SaslMechanism.Create("LOGIN", Encoding.UTF8, new NetworkCredential(emailSett.Username, emailSett.Password) );
+                //client.Authenticate(sasl);
+
                 client.Send(message);
                 client.Disconnect(true);
             }
         }
 
+        private void sendWithNETClient(EmailSettings emailSett)
+        {
+            var smtpClient = new System.Net.Mail.SmtpClient(emailSett.Host)
+            {
+                Port = emailSett.Port,
+                Credentials = new NetworkCredential(emailSett.Username, emailSett.Password),
+                EnableSsl = emailSett.StartTls,
+            };
+
+            var mailMessage = new System.Net.Mail.MailMessage
+            {
+                From = new System.Net.Mail.MailAddress(emailSett.From),
+                Subject = emailSett.Subject,
+                Body = htmlLog2save,
+                IsBodyHtml = true,
+            };
+            foreach (var em in emailSett.To)
+            {
+                mailMessage.To.Add(em);
+            }
+
+            smtpClient.Send(mailMessage);
+            smtpClient.Dispose();
+
+        }
 
         public class OfflineDropSettings
         {
             private string tentacleApplications;
             private string tentacleJournal;
+            private bool sendEmail;
+            private bool useOldSmtpClient;
 
             public string TentacleApplications { get => tentacleApplications; set => tentacleApplications = value; }
             public string TentacleJournal { get => tentacleJournal; set => tentacleJournal = value; }
+            public bool SendEmail { get => sendEmail; set => sendEmail = value; }
+            public bool UseOldSmtpClient { get => useOldSmtpClient; set => useOldSmtpClient = value; }
 
             public OfflineDropSettings()  {  }
 
@@ -366,7 +480,7 @@ namespace OfflineDropRunner
             //for RTF
             using (var memoryStream = new MemoryStream())
             {
-                new TextRange(myFlowDoc.ContentStart, myFlowDoc.ContentEnd).Save(memoryStream, DataFormats.Rtf);
+                new TextRange(myFlowDoc.ContentStart, myFlowDoc.ContentEnd).Save(memoryStream, System.Windows.DataFormats.Rtf);
                 rtf = Encoding.Default.GetString(memoryStream.GetBuffer());
             }
 
@@ -374,9 +488,9 @@ namespace OfflineDropRunner
             TextRange textRangeTxt = new TextRange(myFlowDoc.ContentStart, myFlowDoc.ContentEnd);
 
             if ((bool)this.RtfFormat.IsChecked) {
-                System.Windows.Forms.Clipboard.SetText(rtf, (System.Windows.Forms.TextDataFormat)TextDataFormat.Rtf);
+                System.Windows.Forms.Clipboard.SetText(rtf, (System.Windows.Forms.TextDataFormat)System.Windows.TextDataFormat.Rtf);
             } else {
-                System.Windows.Forms.Clipboard.SetText(textRangeTxt.Text, (System.Windows.Forms.TextDataFormat)TextDataFormat.Text);
+                System.Windows.Forms.Clipboard.SetText(textRangeTxt.Text, (System.Windows.Forms.TextDataFormat)System.Windows.TextDataFormat.Text);
             }
         }
 

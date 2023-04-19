@@ -14,10 +14,11 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition/>
         </Grid.RowDefinitions>
-        <StackPanel Grid.Row="0" VerticalAlignment="Top" Orientation="Horizontal">
+        <StackPanel Grid.Row="0" VerticalAlignment="Center" Orientation="Horizontal" HorizontalAlignment="Left">
             <Button x:Name="RunButton"  Content="Run Offline Drop" HorizontalAlignment="Left" Margin="10,10,3,3" VerticalAlignment="Top" Width="170" Height="40" Click="RunButton_Click"/>
-            <Button x:Name="CopyLog"  Content="Copy Log" HorizontalAlignment="Right" Margin="10,10,3,3" VerticalAlignment="Top" Width="170" Height="40" Click="CopyLog_Click" />
-            <CheckBox x:Name="RtfFormat" Content="RtfFormat ?" VerticalAlignment="Center" Margin="20,10,3,3"></CheckBox>
+            <Button x:Name="CopyLog"  Content="Copy Log" Margin="40,10,3,3" VerticalAlignment="Top" Width="170" Height="40" Click="CopyLog_Click" />
+            <CheckBox x:Name="RtfFormat" Content="RtfFormat ?" VerticalAlignment="Center" Margin="8,10,3,3"></CheckBox>
+            <TextBox x:Name="TxtPassword" Text="Password" Width="284" Height="27" Margin="50,0,0,0"/>
         </StackPanel>
         <ScrollViewer  x:Name="scrollViewTb" Grid.Row="1" HorizontalAlignment="Stretch"  VerticalAlignment="Stretch" Margin="5,5,5,5">
             <RichTextBox x:Name="OutText" IsReadOnly="True" HorizontalAlignment="Stretch" AcceptsReturn="True" VerticalAlignment="Stretch" />

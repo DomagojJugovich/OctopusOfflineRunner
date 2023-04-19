@@ -1,4 +1,6 @@
 ﻿{
   "tentacleApplications": "C:\\OctoApp",
-  "tentacleJournal": "C:\\OctoApp\\WorkingDir\\DeploymentJournal.xml"
+  "tentacleJournal": "C:\\OctoApp\\WorkingDir\\DeploymentJournal.xml",
+  "SendEmail": true,
+  "UseOldSmtpClient" : true
 }
